@@ -4,6 +4,7 @@
 
 ## About
 
+
 ClueEngine is built to provide developers with the tools necessary to easily manage 3D scenes, manipulate objects, and handle real-time rendering. It offers seamless **camera movement**, **texture management**, and an intuitive **user interface** for designing and interacting with 3D worlds.
 
 This engine can be used for creating interactive applications, games, or simulations that require rich 3D rendering.
