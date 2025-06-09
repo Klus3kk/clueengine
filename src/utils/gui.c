@@ -875,7 +875,7 @@ void settings_window(struct nk_context* ctx) {
         nk_layout_row_dynamic(ctx, 25, 1);
         if (nk_button_label(ctx, "Test 3D Audio")) {
             Vector3 testPos = vector_add(camera.Position, vector_scale(camera.Front, 5.0f));
-            playSound3D("resources/audio/test_sound.wav", testPos);
+            playSound3D("resources/audio/test_sound.wav", &testPos);
         }
         #else
         // Audio disabled message

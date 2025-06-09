@@ -339,8 +339,8 @@ void update(double deltaTime) {
     processKeyboardMovements(&camera, deltaTime);
     #ifdef AUDIO_ENABLED
     updateAudioSystem();
-    setListenerPosition(camera.Position);
-    setListenerOrientation(camera.Front, camera.Up);
+    setListenerPosition(&camera.Position);  // Pass address with &
+    setListenerOrientation(&camera.Front, &camera.Up);  // Pass addresses with &
     #endif
 }
 
