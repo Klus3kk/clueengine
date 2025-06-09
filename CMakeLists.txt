@@ -111,7 +111,22 @@ if(NOT EXISTS ${CMAKE_SOURCE_DIR}/external/stb_vorbis.c)
 endif()
 
 # Find GLFW (Windows / Linux / MacOS)
-if (PLATFORM_LINUX OR PLATFORM_MACOS)
+if (PLATFORM_WINDOWS)
+    # Try to find prebuilt GLFW first, then build from source
+    find_library(GLFW_LIBRARY NAMES glfw3 glfw PATHS "${CMAKE_SOURCE_DIR}/lib" NO_DEFAULT_PATH)
+    if(NOT GLFW_LIBRARY)
+        message(STATUS "GLFW not found in lib directory, building from source...")
+        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG 3.3.8)
+        FetchContent_MakeAvailable(glfw)
+        set(GLFW_LIBRARIES glfw)
+    else()
+        message(STATUS "Using prebuilt GLFW: ${GLFW_LIBRARY}")
+        set(GLFW_LIBRARIES ${GLFW_LIBRARY})
+    endif()
+elseif (PLATFORM_LINUX OR PLATFORM_MACOS)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GLFW QUIET glfw3)
     if (NOT GLFW_FOUND)
@@ -133,7 +148,20 @@ endif()
 
 # Find GLEW (Separate for Windows & Linux/macOS)
 if (PLATFORM_WINDOWS)
-    include_directories(${CMAKE_SOURCE_DIR}/include) # Windows uses prebuilt GLEW
+    # Try to find prebuilt GLEW first, then build from source
+    find_library(GLEW_LIBRARY NAMES glew32s glew32 PATHS "${CMAKE_SOURCE_DIR}/lib" NO_DEFAULT_PATH)
+    if(NOT GLEW_LIBRARY)
+        message(STATUS "GLEW not found in lib directory, building from source...")
+        FetchContent_Declare(glew GIT_REPOSITORY https://github.com/nigels-com/glew.git GIT_TAG glew-2.2.0 SOURCE_SUBDIR build/cmake)
+        set(glew-cmake_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+        set(glew-cmake_BUILD_STATIC ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(glew)
+        set(GLEW_LIBRARIES libglew_static)
+    else()
+        message(STATUS "Using prebuilt GLEW: ${GLEW_LIBRARY}")
+        set(GLEW_LIBRARIES ${GLEW_LIBRARY})
+    endif()
+    include_directories(${CMAKE_SOURCE_DIR}/include)
 else()
     find_package(GLEW REQUIRED)
     include_directories(${GLEW_INCLUDE_DIRS})
@@ -164,14 +192,13 @@ endif()
 if (PLATFORM_WINDOWS)
     target_link_libraries(ClueEngine
         OpenGL::GL
-        ${CMAKE_SOURCE_DIR}/lib/glfw3.lib
-        ${CMAKE_SOURCE_DIR}/lib/glew32s.lib
-        ${CMAKE_SOURCE_DIR}/lib/assimp-vc143-mtd.lib
-        ${CMAKE_SOURCE_DIR}/lib/ode_doubled.lib
-        ${CMAKE_SOURCE_DIR}/lib/soil2.lib
-        ${CMAKE_SOURCE_DIR}/lib/cjson.lib
-        ${CMAKE_SOURCE_DIR}/lib/tinyfiledialogs32.lib
-        ${CMAKE_SOURCE_DIR}/lib/tinyfiledialogs64.lib
+        ${GLFW_LIBRARIES}
+        ${GLEW_LIBRARIES}
+        assimp
+        soil2
+        cjson
+        tinyfiledialogs
+        ZLIB::ZLIB
     )
     # Add OpenAL for Windows
     if(OpenAL_FOUND)
