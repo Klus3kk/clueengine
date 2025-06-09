@@ -4,6 +4,7 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "Vectors.h"
 
 #define MAX_AUDIO_SOURCES 32
@@ -108,5 +109,8 @@ ALenum getOpenALFormat(AudioFormat format);
 // Error handling
 void checkALError(const char* operation);
 const char* getALErrorString(ALenum error);
+
+// Helper functions
+int strcasecmp(const char *s1, const char *s2);
 
 #endif

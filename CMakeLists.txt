@@ -71,7 +71,7 @@ if(NOT tinyfiledialogs_POPULATED)
 endif()
 include_directories(${tinyfiledialogs_SOURCE_DIR})
 
-# Assimp (3D Model Loader) - FIXED VERSION
+# Assimp (3D Model Loader) 
 set(ASSIMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
 set(ASSIMP_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
@@ -173,12 +173,12 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/external
 )
 
-# Source files - INCLUDING AUDIO
+# Source files - EXCLUDING stb_vorbis.c (it's included directly in audio.c)
 file(GLOB_RECURSE SOURCES src/*.c src/*.cpp)
 file(GLOB_RECURSE HEADERS include/*.h include/*.hpp)
 
-# Add stb_vorbis implementation
-set(SOURCES ${SOURCES} ${CMAKE_SOURCE_DIR}/external/stb_vorbis.c)
+# Remove stb_vorbis.c from sources if it exists (we include it directly in audio.c)
+list(REMOVE_ITEM SOURCES ${CMAKE_SOURCE_DIR}/external/stb_vorbis.c)
 
 # Ensure add_executable is declared BEFORE linking libraries
 add_executable(ClueEngine ${SOURCES} ${HEADERS})

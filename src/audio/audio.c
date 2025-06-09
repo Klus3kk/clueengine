@@ -3,8 +3,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Include stb_vorbis for OGG support
+#define STB_VORBIS_IMPLEMENTATION
+#include "stb_vorbis.c"
+
 // Global audio system instance
 AudioSystem* audioSystem = NULL;
+
+// WAV file header structure
+typedef struct {
+    char riff[4];           // "RIFF"
+    uint32_t fileSize;      // File size
+    char wave[4];           // "WAVE"
+    char fmt[4];            // "fmt "
+    uint32_t fmtSize;       // Format size
+    uint16_t audioFormat;   // Audio format (1 = PCM)
+    uint16_t numChannels;   // Number of channels
+    uint32_t sampleRate;    // Sample rate
+    uint32_t byteRate;      // Byte rate
+    uint16_t blockAlign;    // Block align
+    uint16_t bitsPerSample; // Bits per sample
+    char data[4];           // "data"
+    uint32_t dataSize;      // Data size
+} WAVHeader;
 
 bool initAudioSystem() {
     if (audioSystem) {
@@ -379,12 +400,272 @@ void resumeAllSounds() {
     }
 }
 
-// Stub implementations for audio buffer management
-// You'll need to implement these based on your audio file format needs
+// Helper function for case-insensitive string comparison
+int strcasecmp(const char *s1, const char *s2) {
+    while (*s1 && *s2) {
+        char c1 = (*s1 >= 'A' && *s1 <= 'Z') ? *s1 + 32 : *s1;
+        char c2 = (*s2 >= 'A' && *s2 <= 'Z') ? *s2 + 32 : *s2;
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+    }
+    return *s1 - *s2;
+}
+
+// Load WAV file
+int loadWAVFile(const char* filepath) {
+    FILE* file = fopen(filepath, "rb");
+    if (!file) {
+        printf("Failed to open WAV file: %s\n", filepath);
+        return -1;
+    }
+
+    WAVHeader header;
+    if (fread(&header, sizeof(WAVHeader), 1, file) != 1) {
+        printf("Failed to read WAV header: %s\n", filepath);
+        fclose(file);
+        return -1;
+    }
+
+    // Verify WAV format
+    if (strncmp(header.riff, "RIFF", 4) != 0 || strncmp(header.wave, "WAVE", 4) != 0) {
+        printf("Invalid WAV file format: %s\n", filepath);
+        fclose(file);
+        return -1;
+    }
+
+    // Find available buffer slot
+    int bufferIndex = -1;
+    for (int i = 0; i < MAX_AUDIO_BUFFERS; i++) {
+        if (!audioSystem->buffers[i]) {
+            bufferIndex = i;
+            break;
+        }
+    }
+
+    if (bufferIndex == -1) {
+        printf("No available audio buffer slots\n");
+        fclose(file);
+        return -1;
+    }
+
+    // Allocate buffer structure
+    audioSystem->buffers[bufferIndex] = (AudioBuffer*)malloc(sizeof(AudioBuffer));
+    if (!audioSystem->buffers[bufferIndex]) {
+        printf("Failed to allocate audio buffer\n");
+        fclose(file);
+        return -1;
+    }
+
+    AudioBuffer* buffer = audioSystem->buffers[bufferIndex];
+
+    // Read audio data
+    unsigned char* data = (unsigned char*)malloc(header.dataSize);
+    if (!data) {
+        printf("Failed to allocate audio data\n");
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        fclose(file);
+        return -1;
+    }
+
+    if (fread(data, header.dataSize, 1, file) != 1) {
+        printf("Failed to read audio data: %s\n", filepath);
+        free(data);
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        fclose(file);
+        return -1;
+    }
+
+    fclose(file);
+
+    // Determine OpenAL format
+    ALenum format;
+    if (header.numChannels == 1) {
+        format = (header.bitsPerSample == 8) ? AL_FORMAT_MONO8 : AL_FORMAT_MONO16;
+        buffer->format = (header.bitsPerSample == 8) ? AUDIO_FORMAT_MONO8 : AUDIO_FORMAT_MONO16;
+    } else {
+        format = (header.bitsPerSample == 8) ? AL_FORMAT_STEREO8 : AL_FORMAT_STEREO16;
+        buffer->format = (header.bitsPerSample == 8) ? AUDIO_FORMAT_STEREO8 : AUDIO_FORMAT_STEREO16;
+    }
+
+    // Create OpenAL buffer
+    alGenBuffers(1, &buffer->buffer);
+    if (alGetError() != AL_NO_ERROR) {
+        printf("Failed to generate OpenAL buffer\n");
+        free(data);
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        return -1;
+    }
+
+    // Upload data to OpenAL
+    alBufferData(buffer->buffer, format, data, header.dataSize, header.sampleRate);
+    if (alGetError() != AL_NO_ERROR) {
+        printf("Failed to upload audio data to OpenAL\n");
+        alDeleteBuffers(1, &buffer->buffer);
+        free(data);
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        return -1;
+    }
+
+    // Store buffer info
+    strncpy(buffer->filepath, filepath, sizeof(buffer->filepath) - 1);
+    buffer->filepath[sizeof(buffer->filepath) - 1] = '\0';
+    buffer->frequency = header.sampleRate;
+    buffer->isLoaded = true;
+
+    free(data);
+    audioSystem->bufferCount++;
+
+    printf("Successfully loaded WAV file: %s (Buffer %d)\n", filepath, bufferIndex);
+    return bufferIndex;
+}
+
+// Load OGG file using stb_vorbis
+int loadOGGFile(const char* filepath) {
+    // Open the OGG file
+    int error = 0;
+    stb_vorbis* vorbis = stb_vorbis_open_filename(filepath, &error, NULL);
+    if (!vorbis) {
+        printf("Failed to open OGG file: %s (Error: %d)\n", filepath, error);
+        return -1;
+    }
+
+    // Get file info
+    stb_vorbis_info info = stb_vorbis_get_info(vorbis);
+    printf("OGG Info - Channels: %d, Sample Rate: %d\n", info.channels, info.sample_rate);
+
+    // Get total samples
+    int totalSamples = stb_vorbis_stream_length_in_samples(vorbis);
+    if (totalSamples <= 0) {
+        printf("Invalid OGG file length: %s\n", filepath);
+        stb_vorbis_close(vorbis);
+        return -1;
+    }
+
+    // Calculate buffer size (16-bit samples)
+    int bufferSize = totalSamples * info.channels * sizeof(short);
+    short* audioData = (short*)malloc(bufferSize);
+    if (!audioData) {
+        printf("Failed to allocate memory for OGG data\n");
+        stb_vorbis_close(vorbis);
+        return -1;
+    }
+
+    // Read the entire file
+    int samplesRead = stb_vorbis_get_samples_short_interleaved(vorbis, info.channels, audioData, totalSamples * info.channels);
+    if (samplesRead <= 0) {
+        printf("Failed to read OGG samples: %s\n", filepath);
+        free(audioData);
+        stb_vorbis_close(vorbis);
+        return -1;
+    }
+
+    // Close the vorbis file
+    stb_vorbis_close(vorbis);
+
+    // Find available buffer slot
+    int bufferIndex = -1;
+    for (int i = 0; i < MAX_AUDIO_BUFFERS; i++) {
+        if (!audioSystem->buffers[i]) {
+            bufferIndex = i;
+            break;
+        }
+    }
+
+    if (bufferIndex == -1) {
+        printf("No available audio buffer slots\n");
+        free(audioData);
+        return -1;
+    }
+
+    // Allocate buffer structure
+    audioSystem->buffers[bufferIndex] = (AudioBuffer*)malloc(sizeof(AudioBuffer));
+    if (!audioSystem->buffers[bufferIndex]) {
+        printf("Failed to allocate audio buffer\n");
+        free(audioData);
+        return -1;
+    }
+
+    AudioBuffer* buffer = audioSystem->buffers[bufferIndex];
+
+    // Determine OpenAL format (OGG is always 16-bit)
+    ALenum format;
+    if (info.channels == 1) {
+        format = AL_FORMAT_MONO16;
+        buffer->format = AUDIO_FORMAT_MONO16;
+    } else {
+        format = AL_FORMAT_STEREO16;
+        buffer->format = AUDIO_FORMAT_STEREO16;
+    }
+
+    // Create OpenAL buffer
+    alGenBuffers(1, &buffer->buffer);
+    if (alGetError() != AL_NO_ERROR) {
+        printf("Failed to generate OpenAL buffer for OGG\n");
+        free(audioData);
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        return -1;
+    }
+
+    // Upload data to OpenAL (actual samples read * channels * sizeof(short))
+    int actualBufferSize = samplesRead * info.channels * sizeof(short);
+    alBufferData(buffer->buffer, format, audioData, actualBufferSize, info.sample_rate);
+    if (alGetError() != AL_NO_ERROR) {
+        printf("Failed to upload OGG data to OpenAL\n");
+        alDeleteBuffers(1, &buffer->buffer);
+        free(audioData);
+        free(audioSystem->buffers[bufferIndex]);
+        audioSystem->buffers[bufferIndex] = NULL;
+        return -1;
+    }
+
+    // Store buffer info
+    strncpy(buffer->filepath, filepath, sizeof(buffer->filepath) - 1);
+    buffer->filepath[sizeof(buffer->filepath) - 1] = '\0';
+    buffer->frequency = info.sample_rate;
+    buffer->isLoaded = true;
+
+    free(audioData);
+    audioSystem->bufferCount++;
+
+    printf("Successfully loaded OGG file: %s (Buffer %d, %d samples, %d channels)\n", 
+           filepath, bufferIndex, samplesRead, info.channels);
+    return bufferIndex;
+}
+
+// Updated loadAudioBuffer function
 int loadAudioBuffer(const char* filepath) {
-    // This is a stub - implement based on your audio file format (WAV, OGG, etc.)
-    printf("Loading audio buffer: %s (stub implementation)\n", filepath);
-    return -1; // Return valid buffer index when implemented
+    if (!audioSystem || !audioSystem->isInitialized) {
+        printf("Audio system not initialized\n");
+        return -1;
+    }
+
+    // Check if already loaded
+    for (int i = 0; i < MAX_AUDIO_BUFFERS; i++) {
+        if (audioSystem->buffers[i] && 
+            strcmp(audioSystem->buffers[i]->filepath, filepath) == 0) {
+            printf("Audio file already loaded: %s (Buffer %d)\n", filepath, i);
+            return i;
+        }
+    }
+
+    // Determine file type and load accordingly
+    const char* ext = strrchr(filepath, '.');
+    if (ext) {
+        if (strcasecmp(ext, ".wav") == 0) {
+            return loadWAVFile(filepath);
+        } else if (strcasecmp(ext, ".ogg") == 0) {
+            return loadOGGFile(filepath);
+        }
+    }
+
+    printf("Unsupported audio format: %s\n", filepath);
+    return -1;
 }
 
 void unloadAudioBuffer(int bufferIndex) {
