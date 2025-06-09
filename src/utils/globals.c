@@ -31,6 +31,7 @@ bool backgroundEnabled = true;
 bool show_change_texture = false;
 bool show_change_material = false;
 bool cameraEnabled = true;
+bool shadowsEnabled = true;
 SceneObject* selected_object = NULL;
 // Initialize the model variable
 Model* loadedModel = NULL;

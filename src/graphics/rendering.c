@@ -9,6 +9,7 @@
 #include "globals.h"
 #include "materials.h"
 #include "gui.h"
+#include "shadow_system.h"
 
 #ifdef AUDIO_ENABLED
 #include "audio.h"
@@ -121,6 +122,15 @@ void setup() {
     // Initialize camera, object manager, and other essential systems
     initCamera(&camera);
     initObjectManager();
+    initLightingSystem();
+    
+    // Initialize shadow system
+    if (!initShadowSystem()) {
+        printf("Warning: Shadow system initialization failed\n");
+        shadowsEnabled = false;
+    } else {
+        printf("Shadow system initialized successfully\n");
+    }
 
     // Enable depth testing for 3D rendering
     glEnable(GL_DEPTH_TEST);
@@ -227,11 +237,18 @@ void setShaderUniforms(SceneObject* obj) {
     }
 }
 
+// In the render() function in rendering.c, modify the rendering pipeline:
 void render() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     Matrix4x4 projMatrix = getProjectionMatrix(45.0f, (float)screen.width / screen.height, 0.1f, 100.0f);
     Matrix4x4 viewMatrix = getViewMatrix(&camera);
+
+    // First pass: Render shadow maps
+    if (shadowsEnabled && shadowSystem && shadowSystem->enableShadows) {
+        updateShadowMaps();
+        renderShadowMaps();
+    }
 
     // Draw skybox first if background is enabled
     if (backgroundEnabled) {
@@ -240,17 +257,28 @@ void render() {
         glDepthFunc(GL_LESS);
     }
 
-    // Use shader program once
+    // Second pass: Render scene with shadows
     glUseProgram(shaderProgram);
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &viewMatrix.data[0][0]);
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projMatrix.data[0][0]);
+    
+    // Update lighting uniforms
     updateShaderLights();
     glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, (const GLfloat*)&camera.Position);
-    glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, (const GLfloat*)&lights[0].position);
-    glUniform3fv(glGetUniformLocation(shaderProgram, "lightColor"), 1, (const GLfloat*)&lights[0].color);
-    glUniform1f(glGetUniformLocation(shaderProgram, "lightIntensity"), lights[0].intensity);
     glUniform1i(glGetUniformLocation(shaderProgram, "useLighting"), lightingEnabled);
     glUniform1i(glGetUniformLocation(shaderProgram, "noShading"), !lightingEnabled);
+
+    // Bind shadow maps and set shadow uniforms
+    if (shadowsEnabled && shadowSystem && shadowSystem->enableShadows) {
+        bindShadowMapsForRendering();
+        setShadowUniforms(shaderProgram);
+    } else {
+        // Disable shadows in shader
+        GLint enableShadowsLoc = glGetUniformLocation(shaderProgram, "enableShadows");
+        if (enableShadowsLoc != -1) {
+            glUniform1i(enableShadowsLoc, 0);
+        }
+    }
 
     // Enable depth testing
     glEnable(GL_DEPTH_TEST);
@@ -298,6 +326,11 @@ void render() {
             drawMesh(&model->meshes[i]);
         }
     }
+
+    // Debug render shadow maps if enabled
+    if (shadowsEnabled && shadowSystem && shadowSystem->showShadowMaps) {
+        debugRenderShadowMaps();
+    }
 }
 
 double calculateDeltaTime() {
@@ -321,6 +354,34 @@ void update(double deltaTime) {
     handleToggleInput(GLFW_KEY_L, &colorTogglePressed, &colorsEnabled, "Colors");
     handleToggleInput(GLFW_KEY_J, &lightPressed1, &noShading, "Shading");
     handleToggleInput(GLFW_KEY_Q, &pbrTogglePressed, &usePBR, "PBR");
+    
+    // Add shadow controls
+    static bool shadowTogglePressed = false;
+    static bool shadowQualityPressed = false;
+    static bool shadowDebugPressed = false;
+    
+    handleToggleInput(GLFW_KEY_M, &shadowTogglePressed, &shadowsEnabled, "Shadows");
+    
+    if (glfwGetKey(screen.window, GLFW_KEY_N) == GLFW_PRESS && !shadowQualityPressed) {
+        if (shadowSystem) {
+            toggleShadowQuality();
+        }
+        shadowQualityPressed = true;
+    }
+    else if (glfwGetKey(screen.window, GLFW_KEY_N) == GLFW_RELEASE) {
+        shadowQualityPressed = false;
+    }
+    
+    if (glfwGetKey(screen.window, GLFW_KEY_COMMA) == GLFW_PRESS && !shadowDebugPressed) {
+        if (shadowSystem) {
+            shadowSystem->showShadowMaps = !shadowSystem->showShadowMaps;
+            printf("Shadow debug view %s\n", shadowSystem->showShadowMaps ? "enabled" : "disabled");
+        }
+        shadowDebugPressed = true;
+    }
+    else if (glfwGetKey(screen.window, GLFW_KEY_COMMA) == GLFW_RELEASE) {
+        shadowDebugPressed = false;
+    }
 
     handleObjectCreation(GLFW_KEY_O, &planePressed, OBJ_PLANE);
     handleObjectCreation(GLFW_KEY_C, &cubePressed, OBJ_CUBE);
@@ -339,10 +400,11 @@ void update(double deltaTime) {
     processKeyboardMovements(&camera, deltaTime);
     #ifdef AUDIO_ENABLED
     updateAudioSystem();
-    setListenerPosition(&camera.Position);  // Pass address with &
-    setListenerOrientation(&camera.Front, &camera.Up);  // Pass addresses with &
+    setListenerPosition(&camera.Position);
+    setListenerOrientation(&camera.Front, &camera.Up);
     #endif
 }
+
 
 void handleMouseInput(GLFWwindow* window, Camera* camera) {
     static double lastX = 0, lastY = 0;
@@ -380,6 +442,11 @@ void handleMouseInput(GLFWwindow* window, Camera* camera) {
 
 void end() {
     cleanupObjects();
+
+    if (shadowSystem) {
+        shutdownShadowSystem();
+    }
+    
     #ifdef AUDIO_ENABLED
     shutdownAudioSystem();
     #endif

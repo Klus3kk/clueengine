@@ -792,6 +792,7 @@ void settings_window(struct nk_context* ctx) {
     static struct nk_colorf bg_color = { 0.0f, 0.0f, 0.0f, 1.0f };
     static float camera_speed;
     static float movement_speed;
+    static float shadow_bias = 0.005f;
     
     // AUDIO CONTROLS
     #ifdef AUDIO_ENABLED
@@ -1019,7 +1020,7 @@ void change_background_window(struct nk_context* ctx) {
 
 // View menu function
 void view_menu(struct nk_context* ctx) {
-    if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT, nk_vec2(200, 400))) {
+    if (nk_menu_begin_label(ctx, "View", NK_TEXT_LEFT, nk_vec2(200, 450))) {
         nk_layout_row_dynamic(ctx, 25, 1);
 
         if (nk_menu_item_label(ctx, "Toggle Fullscreen", NK_TEXT_LEFT)) {
@@ -1052,6 +1053,7 @@ void view_menu(struct nk_context* ctx) {
                 toggle_object_property(&objectManager.objects[i], "usePBR");
             }
         }
+        
         if (nk_menu_item_label(ctx, isRunning ? "Pause Engine" : "Start Engine", NK_TEXT_LEFT)) {
             if (isRunning) {
                 isRunning = false;

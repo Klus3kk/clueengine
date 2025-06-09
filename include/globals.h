@@ -62,6 +62,7 @@ extern bool usePBR;
 extern bool pbrTogglePressed;
 extern bool backgroundEnabled;
 extern bool cameraEnabled;
+extern bool shadowsEnabled;
 
 // Model and rendering data
 extern Model* loadedModel;

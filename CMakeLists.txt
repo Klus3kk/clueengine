@@ -272,6 +272,73 @@ add_custom_command(TARGET ClueEngine POST_BUILD
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/resources/audio
 )
 
+# ===== SHADOW MAPPING ADDITIONS =====
+
+# Create shadow shader directory
+add_custom_command(TARGET ClueEngine POST_BUILD      
+    COMMAND ${CMAKE_COMMAND} -E make_directory       
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows
+)
+
+# Copy shadow shaders (only if they exist)
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/shadow_vertex.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/shadow_vertex.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/shadow_vertex.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/shadow_fragment.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/shadow_fragment.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/shadow_fragment.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_vertex.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_vertex.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/point_shadow_vertex.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_fragment.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_fragment.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/point_shadow_fragment.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_geometry.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/point_shadow_geometry.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/point_shadow_geometry.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/debug_vertex.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/debug_vertex.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/debug_vertex.glsl
+    )
+endif()
+
+if(EXISTS ${CMAKE_SOURCE_DIR}/shaders/shadows/debug_fragment.glsl)
+    add_custom_command(TARGET ClueEngine POST_BUILD      
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different    
+        ${CMAKE_SOURCE_DIR}/shaders/shadows/debug_fragment.glsl
+        ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders/shadows/debug_fragment.glsl
+    )
+endif()
+
+# ===== END SHADOW MAPPING ADDITIONS =====
+
 # Set working directory in Visual Studio
 if (PLATFORM_WINDOWS)
     set_target_properties(ClueEngine PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")  
@@ -295,4 +362,12 @@ endif()
 message(STATUS "GLFW: ${GLFW_FOUND}")
 message(STATUS "ZLIB: ${ZLIB_FOUND}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+# Check if shadow system files exist and report
+if(EXISTS ${CMAKE_SOURCE_DIR}/include/shadow_system.h)
+    message(STATUS "Shadow mapping: Enabled")
+else()
+    message(STATUS "Shadow mapping: Files not found - will be disabled")
+endif()
+
 message(STATUS "=====================================")
