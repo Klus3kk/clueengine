@@ -655,35 +655,38 @@ void renderShadowMaps() {
     glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 }
 
+
 void bindShadowMapsForRendering() {
     if (!shadowSystem || !shadowSystem->enableShadows) return;
 
     int textureUnit = 10; // Start from texture unit 10 for shadow maps
+    int shadowMapIndex = 0;
 
-    // Bind directional shadow maps
+    // Bind directional shadow maps to individual samplers
     for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
         if (shadowSystem->directionalShadows[i] && shadowSystem->directionalShadows[i]->isActive) {
-            glActiveTexture(GL_TEXTURE0 + textureUnit);
+            glActiveTexture(GL_TEXTURE0 + textureUnit + shadowMapIndex);
             glBindTexture(GL_TEXTURE_2D, shadowSystem->directionalShadows[i]->depthTexture);
-            textureUnit++;
+            shadowMapIndex++;
         }
     }
 
-    // Bind point shadow maps
-    for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
-        if (shadowSystem->pointShadows[i] && shadowSystem->pointShadows[i]->isActive) {
-            glActiveTexture(GL_TEXTURE0 + textureUnit);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, shadowSystem->pointShadows[i]->depthCubemap);
-            textureUnit++;
-        }
-    }
-
-    // Bind spot shadow maps
+    // Bind spot shadow maps to individual samplers
     for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
         if (shadowSystem->spotShadows[i] && shadowSystem->spotShadows[i]->isActive) {
-            glActiveTexture(GL_TEXTURE0 + textureUnit);
+            glActiveTexture(GL_TEXTURE0 + textureUnit + shadowMapIndex);
             glBindTexture(GL_TEXTURE_2D, shadowSystem->spotShadows[i]->depthTexture);
-            textureUnit++;
+            shadowMapIndex++;
+        }
+    }
+
+    // Bind point shadow maps to individual samplers
+    int pointShadowIndex = 0;
+    for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
+        if (shadowSystem->pointShadows[i] && shadowSystem->pointShadows[i]->isActive) {
+            glActiveTexture(GL_TEXTURE0 + textureUnit + 8 + pointShadowIndex); // Start point shadows at unit 18
+            glBindTexture(GL_TEXTURE_CUBE_MAP, shadowSystem->pointShadows[i]->depthCubemap);
+            pointShadowIndex++;
         }
     }
 }
@@ -705,22 +708,34 @@ void setShadowUniforms(GLuint shader) {
         glUniform1i(enableShadowsLoc, shadowSystem->enableShadows ? 1 : 0);
     }
 
+    // Set individual shadow map samplers
+    char uniformName[64];
+    for (int i = 0; i < 8; i++) {
+        snprintf(uniformName, sizeof(uniformName), "shadowMap%d", i);
+        GLint shadowMapLoc = glGetUniformLocation(shader, uniformName);
+        if (shadowMapLoc != -1) {
+            glUniform1i(shadowMapLoc, 10 + i); // Texture units 10-17
+        }
+    }
+
+    // Set individual point shadow map samplers
+    for (int i = 0; i < 8; i++) {
+        snprintf(uniformName, sizeof(uniformName), "pointShadowMap%d", i);
+        GLint pointShadowMapLoc = glGetUniformLocation(shader, uniformName);
+        if (pointShadowMapLoc != -1) {
+            glUniform1i(pointShadowMapLoc, 18 + i); // Texture units 18-25
+        }
+    }
+
     // Set light space matrices for directional/spot lights
     int shadowMapIndex = 0;
     for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
         if (shadowSystem->directionalShadows[i] && shadowSystem->directionalShadows[i]->isActive) {
-            char uniformName[64];
             snprintf(uniformName, sizeof(uniformName), "lightSpaceMatrix[%d]", shadowMapIndex);
             GLint lightSpaceMatrixLoc = glGetUniformLocation(shader, uniformName);
             if (lightSpaceMatrixLoc != -1) {
                 glUniformMatrix4fv(lightSpaceMatrixLoc, 1, GL_FALSE, 
                                  &shadowSystem->directionalShadows[i]->lightSpaceMatrix.data[0][0]);
-            }
-
-            snprintf(uniformName, sizeof(uniformName), "shadowMap[%d]", shadowMapIndex);
-            GLint shadowMapLoc = glGetUniformLocation(shader, uniformName);
-            if (shadowMapLoc != -1) {
-                glUniform1i(shadowMapLoc, 10 + shadowMapIndex);
             }
             shadowMapIndex++;
         }
@@ -730,13 +745,6 @@ void setShadowUniforms(GLuint shader) {
     int pointShadowIndex = 0;
     for (int i = 0; i < MAX_SHADOW_MAPS; i++) {
         if (shadowSystem->pointShadows[i] && shadowSystem->pointShadows[i]->isActive) {
-            char uniformName[64];
-            snprintf(uniformName, sizeof(uniformName), "pointShadowMaps[%d]", pointShadowIndex);
-            GLint pointShadowMapLoc = glGetUniformLocation(shader, uniformName);
-            if (pointShadowMapLoc != -1) {
-                glUniform1i(pointShadowMapLoc, 10 + shadowMapIndex + pointShadowIndex);
-            }
-
             snprintf(uniformName, sizeof(uniformName), "pointLightPositions[%d]", pointShadowIndex);
             GLint pointLightPosLoc = glGetUniformLocation(shader, uniformName);
             if (pointLightPosLoc != -1) {
