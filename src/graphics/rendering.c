@@ -10,6 +10,11 @@
 #include "materials.h"
 #include "gui.h"
 
+#ifdef AUDIO_ENABLED
+#include "audio.h"
+#endif
+
+
 // Function prototypes
 static Model* model = NULL;
 
@@ -36,13 +41,22 @@ void loadResources(int stage, float* progress) {
         break;
     case 4:  // Setup Lighting
         initLightingSystem();
-        *progress += 0.3f;
+        *progress += 0.2f;
+        break;
+    case 5:  // Setup Audio (NEW)
+        #ifdef AUDIO_ENABLED
+        if (initAudioSystem()) {
+            printf("Audio system initialized successfully\n");
+        } else {
+            printf("Audio system failed to initialize - continuing without audio\n");
+        }
+        #endif
+        *progress += 0.1f;
         break;
     default:
         break;
     }
 }
-
 void setup() {
     strncpy(screen.title, "C1ue Engine v1.1.0", sizeof(screen.title) - 1);
 
@@ -323,6 +337,11 @@ void update(double deltaTime) {
     }
 
     processKeyboardMovements(&camera, deltaTime);
+    #ifdef AUDIO_ENABLED
+    updateAudioSystem();
+    setListenerPosition(camera.Position);
+    setListenerOrientation(camera.Front, camera.Up);
+    #endif
 }
 
 void handleMouseInput(GLFWwindow* window, Camera* camera) {
@@ -361,6 +380,9 @@ void handleMouseInput(GLFWwindow* window, Camera* camera) {
 
 void end() {
     cleanupObjects();
+    #ifdef AUDIO_ENABLED
+    shutdownAudioSystem();
+    #endif
     glfwDestroyWindow(screen.window);
     glfwTerminate();
 }

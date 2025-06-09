@@ -38,6 +38,11 @@
 #include "background.h"
 #include "actions.h"
 
+// Audio system header
+#ifdef AUDIO_ENABLED
+#include "audio.h"
+#endif
+
 extern int textureCount;
 extern int materialCount;
 
@@ -787,6 +792,18 @@ void settings_window(struct nk_context* ctx) {
     static struct nk_colorf bg_color = { 0.0f, 0.0f, 0.0f, 1.0f };
     static float camera_speed;
     static float movement_speed;
+    
+    // AUDIO CONTROLS
+    #ifdef AUDIO_ENABLED
+    static float master_volume = 1.0f;
+    static bool audio_initialized = false;
+    static bool first_time = true;
+    
+    if (first_time) {
+        master_volume = getMasterVolume();
+        first_time = false;
+    }
+    #endif
 
     // Initialize width and height once, not every frame
     static int initialized = 0;
@@ -798,10 +815,14 @@ void settings_window(struct nk_context* ctx) {
     camera_speed = camera.MouseSensitivity;
     movement_speed = camera.MovementSpeed;
 
-    if (nk_begin(ctx, "Settings", nk_rect(400, 200, 300, 400), NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE)) {
+    if (nk_begin(ctx, "Settings", nk_rect(400, 200, 320, 500), NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_CLOSABLE)) {
         nk_layout_row_dynamic(ctx, 25, 1);
         nk_label(ctx, "Settings Panel", NK_TEXT_CENTERED);
 
+        // VIDEO SETTINGS
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "Video Settings", NK_TEXT_LEFT);
+        
         nk_property_int(ctx, "Width:", 800, &width, 3840, 10, 1);
         nk_property_int(ctx, "Height:", 600, &height, 2160, 10, 1);
 
@@ -817,12 +838,66 @@ void settings_window(struct nk_context* ctx) {
         camera.MovementSpeed = movement_speed;
         camera.MouseSensitivity = camera_speed;
 
+        // AUDIO SETTINGS SECTION
+        #ifdef AUDIO_ENABLED
+        nk_layout_row_dynamic(ctx, 10, 1); // Spacer
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "Audio Settings", NK_TEXT_LEFT);
+        
+        // Master Volume Slider
+        nk_layout_row_dynamic(ctx, 25, 1);
+        float old_volume = master_volume;
+        master_volume = nk_slide_float(ctx, 0.0f, master_volume, 1.0f, 0.01f);
+        if (master_volume != old_volume) {
+            setMasterVolume(master_volume);
+        }
+        
+        // Volume display
+        char volume_text[64];
+        snprintf(volume_text, sizeof(volume_text), "Master Volume: %.0f%%", master_volume * 100);
+        nk_label(ctx, volume_text, NK_TEXT_LEFT);
+        
+        // Test Audio Buttons
+        nk_layout_row_dynamic(ctx, 25, 2);
+        if (nk_button_label(ctx, "Test Sound")) {
+            playSound("resources/audio/test_sound.wav");
+        }
+        if (nk_button_label(ctx, "Stop All")) {
+            stopAllSounds();
+        }
+        
+        nk_layout_row_dynamic(ctx, 25, 1);
+        if (nk_button_label(ctx, "Play Music")) {
+            playMusic("resources/audio/background_music.ogg", true);
+        }
+        
+        // 3D Audio Test
+        nk_layout_row_dynamic(ctx, 25, 1);
+        if (nk_button_label(ctx, "Test 3D Audio")) {
+            Vector3 testPos = vector_add(camera.Position, vector_scale(camera.Front, 5.0f));
+            playSound3D("resources/audio/test_sound.wav", testPos);
+        }
+        #else
+        // Audio disabled message
+        nk_layout_row_dynamic(ctx, 10, 1); // Spacer
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "Audio: DISABLED", NK_TEXT_LEFT);
+        nk_layout_row_dynamic(ctx, 15, 1);
+        nk_label(ctx, "(Rebuild with OpenAL)", NK_TEXT_LEFT);
+        #endif
+
+        // BACKGROUND COLOR PICKER
+        nk_layout_row_dynamic(ctx, 10, 1); // Spacer
+        nk_layout_row_dynamic(ctx, 20, 1);
+        nk_label(ctx, "Background Color", NK_TEXT_LEFT);
+        
         nk_layout_row_dynamic(ctx, 120, 1);
         bg_color = nk_color_picker(ctx, bg_color, NK_RGBA);
 
         if (nk_button_label(ctx, "Apply Background Color")) {
             glClearColor(bg_color.r, bg_color.g, bg_color.b, bg_color.a);
         }
+        
         nk_end(ctx);
     }
     else {
@@ -857,12 +932,21 @@ void file_menu(struct nk_context* ctx) {
         nk_layout_row_dynamic(ctx, 25, 1);
         if (nk_menu_item_label(ctx, "New Project", NK_TEXT_LEFT)) {
             new_project();  // Reset project data
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/project_new.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Open Project...", NK_TEXT_LEFT)) {
             load_project();  // Invoke load with file dialog
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/project_load.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Save Project", NK_TEXT_LEFT)) {
             save_project();  // Invoke save with file dialog
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/project_save.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Exit", NK_TEXT_LEFT)) {
             glfwSetWindowShouldClose(window, 1);
@@ -1017,31 +1101,55 @@ void help_menu(struct nk_context* ctx) {
 
 // Object menu function
 void object_menu(struct nk_context* ctx) {
-    if (nk_menu_begin_label(ctx, "Objects", NK_TEXT_LEFT, nk_vec2(200, 250))) {  // Increase the width from 120 to 200
+    if (nk_menu_begin_label(ctx, "Objects", NK_TEXT_LEFT, nk_vec2(200, 250))) {
         nk_layout_row_dynamic(ctx, 25, 1);
         if (nk_menu_item_label(ctx, "Add Cube", NK_TEXT_LEFT)) {
             addObject(&camera, OBJ_CUBE, texturesEnabled, textureIndex, colorsEnabled, NULL, *getMaterial("peacockOre"), true);
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/object_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Sphere", NK_TEXT_LEFT)) {
             addObject(&camera, OBJ_SPHERE, texturesEnabled, textureIndex, colorsEnabled, NULL, *getMaterial("peacockOre"), true);
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/object_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Pyramid", NK_TEXT_LEFT)) {
             addObject(&camera, OBJ_PYRAMID, texturesEnabled, textureIndex, colorsEnabled, NULL, *getMaterial("peacockOre"), true);
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/object_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Plane", NK_TEXT_LEFT)) {
             addObject(&camera, OBJ_PLANE, texturesEnabled, textureIndex, colorsEnabled, NULL, *getMaterial("peacockOre"), true);
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/object_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Cylinder", NK_TEXT_LEFT)) {
             addObject(&camera, OBJ_CYLINDER, texturesEnabled, textureIndex, colorsEnabled, NULL, *getMaterial("peacockOre"), true);
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/object_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Point Light", NK_TEXT_LEFT)) {
             add_point_light(); // Add point light
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/light_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Directional Light", NK_TEXT_LEFT)) {
             add_directional_light(); // Add directional light
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/light_create.wav");
+            #endif
         }
         if (nk_menu_item_label(ctx, "Add Spotlight", NK_TEXT_LEFT)) {
             add_spotlight(); // Add spotlight
+            #ifdef AUDIO_ENABLED
+            playSound("resources/audio/light_create.wav");
+            #endif
         }
         nk_menu_end(ctx);
     }

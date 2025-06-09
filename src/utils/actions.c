@@ -6,6 +6,10 @@
 #include "ModelLoad.h"
 #include <string.h>
 
+#ifdef AUDIO_ENABLED
+#include "audio.h"
+#endif
+
 // Define the stacks for undo and redo
 Action undoStack[MAX_ACTIONS];
 Action redoStack[MAX_ACTIONS];
@@ -98,6 +102,8 @@ void redo_last_action() {
 void removeObjectWithAction(int index) {
     if (index < 0 || index >= objectManager.count) return;
 
+    printf("Removing object at index: %d\n", index);
+
     Action action = {
         .type = ACTION_REMOVE,
         .previousState = objectManager.objects[index],
@@ -106,6 +112,11 @@ void removeObjectWithAction(int index) {
 
     pushUndoAction(action);
     addToHistory(action);
+
+    // AUDIO FEEDBACK
+    #ifdef AUDIO_ENABLED
+    playSound("resources/audio/object_delete.wav");
+    #endif
 
     // Remove the object
     removeObject(index);
@@ -124,7 +135,7 @@ void removeObjectWithAction(int index) {
     }
 
     if (selected_object) {
-        printf("New selected object: ID=%d, Index=%d\n", selected_object->id, selected_object - objectManager.objects);
+        printf("New selected object: ID=%d, Index=%ld\n", selected_object->id, selected_object - objectManager.objects);
     }
     else {
         printf("No selected object\n");
@@ -148,6 +159,11 @@ void addObjectWithAction(ObjectType type, bool useTextures, int textureID, bool 
     snprintf(action.description, sizeof(action.description), "Added object of type %d", type);
     pushUndoAction(action);
     addToHistory(action);
+    
+    // AUDIO FEEDBACK
+    #ifdef AUDIO_ENABLED
+    playSound("resources/audio/object_create.wav");
+    #endif
 }
 
 void transformObjectWithAction(int index, Vector3 position, Vector3 rotation, Vector3 scale) {

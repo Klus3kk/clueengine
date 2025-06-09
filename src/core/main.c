@@ -2,12 +2,19 @@
 #include "rendering.h"
 #include "globals.h"
 
+// AUDIO SYSTEM INTEGRATION
+#ifdef AUDIO_ENABLED
+#include "audio.h"
+#endif
+
 int main(void) {
     #ifdef _WIN32
         #include <windows.h>
         ShowWindow(GetConsoleWindow(), SW_HIDE);  // Hide console only on Windows
     #endif
 
+    printf("=== ClueEngine v1.1.0 Starting ===\n");
+    
     setup();  // Set up OpenGL context, load shaders, and other resources
 
     initLoadingScreen(screen.window);
@@ -16,6 +23,14 @@ int main(void) {
     run_loading_screen(screen.window);  // Display and run the loading screen
     glfwSetKeyCallback(screen.window, key_callback);  // Set key callbacks for user input
     glfwSetFramebufferSizeCallback(screen.window, framebuffer_size_callback); // Handle window resizing
+
+    printf("Engine initialization complete!\n");
+    
+    #ifdef AUDIO_ENABLED
+    printf("Audio system: ENABLED\n");
+    #else
+    printf("Audio system: DISABLED\n");
+    #endif
 
     while (!glfwWindowShouldClose(screen.window)) {
         glfwPollEvents();  // Handle GLFW events such as input and window actions
@@ -36,7 +51,9 @@ int main(void) {
         glfwSwapBuffers(screen.window);  // Swap the front and back buffers
     }
 
+    printf("Shutting down ClueEngine...\n");
     teardown_nuklear();  // Clean up Nuklear GUI resources
     end();  // Clean up OpenGL and other resources
+    printf("ClueEngine shutdown complete.\n");
     return 0;
 }
